@@ -146,53 +146,30 @@ class Queue:
                 exisiting_task = self._queue[duplicate_index]
                 # Keep the earliest timestamp
                 if self._timestamp_for_task(task) < self._timestamp_for_task(exisiting_task):
+                    task.metadata = exisiting_task.metadata # Preserve metadata of existing task? No, re-eval later
                     self._queue[duplicate_index] = task
-                continue
+                
+                # Ensure we update logic below for the user of this task
             else:
                 metadata = task.metadata
                 metadata.setdefault("priority", Priority.NORMAL)
                 metadata.setdefault("group_earliest_timestamp", MAX_TIMESTAMP)
                 self._queue.append(task)
+            
+            # Update Rule of 3 for the user
+            user_id = task.user_id
+            user_tasks = [t for t in self._queue if t.user_id == user_id]
+            if len(user_tasks) >= 3:
+                earliest_timestamp = sorted(user_tasks, key=lambda t: self._timestamp_for_task(t))[0].timestamp
+                for t in user_tasks:
+                    t.metadata["priority"] = Priority.HIGH
+                    t.metadata["group_earliest_timestamp"] = earliest_timestamp
+            
         return self.size
 
     def dequeue(self):
         if self.size == 0:
             return None
-
-        user_ids = {task.user_id for task in self._queue}
-        task_count = {}
-        priority_timestamps = {}
-        for user_id in user_ids:
-            user_tasks = [t for t in self._queue if t.user_id == user_id]
-            earliest_timestamp = sorted(user_tasks, key=lambda t: self._timestamp_for_task(t))[0].timestamp
-            priority_timestamps[user_id] = earliest_timestamp
-            task_count[user_id] = len(user_tasks)
-
-        for task in self._queue:
-            metadata = task.metadata
-            raw_priority = metadata.get("priority")
-            try:
-                priority_level = Priority(raw_priority)
-            except (TypeError, ValueError):
-                priority_level = None
-
-            if priority_level is None or priority_level == Priority.NORMAL:
-                # Recalculate Rule of 3 for NORMAL priority tasks
-                metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
-                if task_count[task.user_id] >= 3:
-                    metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
-                    metadata["priority"] = Priority.HIGH
-                else:
-                    metadata["priority"] = Priority.NORMAL
-            else:
-                # Task already has HIGH priority - keep it, but update group_earliest based on CURRENT tasks
-                if task_count[task.user_id] >= 3:
-                    metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
-                else:
-                    # User no longer has Rule of 3, but task keeps HIGH priority
-                    # Use MAX_TIMESTAMP so it sorts by its own timestamp
-                    metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
-                metadata["priority"] = priority_level
 
         # Pre-calculate newest timestamp for bank_statements age calculation
         if self._queue:
@@ -308,3 +285,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
