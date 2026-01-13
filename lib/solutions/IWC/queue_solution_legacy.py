@@ -168,13 +168,29 @@ class Queue:
 
         for task in self._queue:
             metadata = task.metadata
-            # Always recalculate Rule of 3 based on current task count
-            metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
-            if task_count[task.user_id] >= 3:
-                metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
-                metadata["priority"] = Priority.HIGH
+            raw_priority = metadata.get("priority")
+            try:
+                priority_level = Priority(raw_priority)
+            except (TypeError, ValueError):
+                priority_level = None
+
+            if priority_level is None or priority_level == Priority.NORMAL:
+                # Recalculate Rule of 3 for NORMAL priority tasks
+                metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
+                if task_count[task.user_id] >= 3:
+                    metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
+                    metadata["priority"] = Priority.HIGH
+                else:
+                    metadata["priority"] = Priority.NORMAL
             else:
-                metadata["priority"] = Priority.NORMAL
+                # Task already has HIGH priority - keep it, but update group_earliest based on CURRENT tasks
+                if task_count[task.user_id] >= 3:
+                    metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
+                else:
+                    # User no longer has Rule of 3, but task keeps HIGH priority
+                    # Use MAX_TIMESTAMP so it sorts by its own timestamp
+                    metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
+                metadata["priority"] = priority_level
 
         # Pre-calculate newest timestamp for bank_statements age calculation
         if self._queue:
@@ -290,6 +306,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
