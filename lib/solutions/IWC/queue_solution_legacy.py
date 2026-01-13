@@ -50,7 +50,6 @@ REGISTERED_PROVIDERS: list[Provider] = [
 class Queue:
     def __init__(self):
         self._queue = []
-        self._newest_timestamp_cache = None  # Cache for sort key calculation
 
     def _is_bank_statements_provider(self, task: TaskSubmission) -> bool:
         return task.provider == "bank_statements"
@@ -61,39 +60,19 @@ class Queue:
     def _bank_statements_sort_key(self, task: TaskSubmission):
         is_bank = self._is_bank_statements_provider(task)
         priority = self._priority_for_task(task)
-        task_timestamp = self._timestamp_for_task(task)
         
-        group_earliest_raw = self._earliest_group_timestamp_for_task(task)
-        if group_earliest_raw == MAX_TIMESTAMP:
-            group_timestamp = task_timestamp
-        elif isinstance(group_earliest_raw, str):
-            group_timestamp = self._timestamp_for_task(TaskSubmission(provider="", user_id=0, timestamp=group_earliest_raw))
-        else:
-            group_timestamp = group_earliest_raw
-
-        if is_bank and self._newest_timestamp_cache is not None:
-            task_age_seconds = (self._newest_timestamp_cache - task_timestamp).total_seconds()
-            is_bank_and_old = task_age_seconds >= 300 
-        else:
-            is_bank_and_old = False
-
-        # 1. Rule of 3 elevation: Treat as a normal task
-        if is_bank and priority == Priority.HIGH and group_earliest_raw != MAX_TIMESTAMP:
-            return (group_timestamp, priority, 0, task_timestamp, 0)
-
-        # 2. Time-based elevation: Priority 1.5 (between HIGH and NORMAL)
-        if is_bank_and_old:
-            return (task_timestamp, 1.5, 0, task_timestamp, 0)
-        
-        # 3. Standard Bank Statement: Use actual timestamp but lower priority (3)
-        # FIX: Changed MAX_TIMESTAMP to task_timestamp to prevent global "dumping"
+        # For bank_statements tasks with NORMAL priority (no Rule of 3), globally deprioritize
+        if is_bank and priority == Priority.NORMAL:
+            # Globally deprioritize - use a high priority number to sort last
+            return (3, 0, MAX_TIMESTAMP, self._timestamp_for_task(task))
         elif is_bank:
-            return (task_timestamp, 3, 1, task_timestamp, 0)
-        
-        # 4. All other tasks
+            # Bank statements for users with HIGH priority (Rule of 3): deprioritize within their own tasks
+            # but still respect Rule of 3 priority over other users
+            return (priority, 1, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
         else:
-            return (group_timestamp, priority, 0, task_timestamp, 0)
-            
+            # Normal tasks
+            return (priority, 0, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
+    
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
         if provider is None:
@@ -146,38 +125,47 @@ class Queue:
                 exisiting_task = self._queue[duplicate_index]
                 # Keep the earliest timestamp
                 if self._timestamp_for_task(task) < self._timestamp_for_task(exisiting_task):
-                    task.metadata = exisiting_task.metadata # Preserve metadata of existing task? No, re-eval later
                     self._queue[duplicate_index] = task
-                
-                # Ensure we update logic below for the user of this task
+                continue
             else:
                 metadata = task.metadata
                 metadata.setdefault("priority", Priority.NORMAL)
                 metadata.setdefault("group_earliest_timestamp", MAX_TIMESTAMP)
                 self._queue.append(task)
-            
-            # Update Rule of 3 for the user
-            user_id = task.user_id
-            user_tasks = [t for t in self._queue if t.user_id == user_id]
-            if len(user_tasks) >= 3:
-                # Debug print
-                # print(f"User {user_id} reached 3 tasks. Updating {len(user_tasks)} tasks.")
-                earliest_timestamp = sorted(user_tasks, key=lambda t: self._timestamp_for_task(t))[0].timestamp
-                for t in user_tasks:
-                    t.metadata["priority"] = Priority.HIGH
-                    t.metadata["group_earliest_timestamp"] = earliest_timestamp
-            
         return self.size
 
     def dequeue(self):
         if self.size == 0:
             return None
 
-        # Pre-calculate newest timestamp for bank_statements age calculation
-        if self._queue:
-            self._newest_timestamp_cache = max(self._timestamp_for_task(t) for t in self._queue)
-        else:
-            self._newest_timestamp_cache = None
+        user_ids = {task.user_id for task in self._queue}
+        task_count = {}
+        priority_timestamps = {}
+        for user_id in user_ids:
+            user_tasks = [t for t in self._queue if t.user_id == user_id]
+            earliest_timestamp = sorted(user_tasks, key=lambda t: self._timestamp_for_task(t))[0].timestamp
+            priority_timestamps[user_id] = earliest_timestamp
+            task_count[user_id] = len(user_tasks)
+
+        for task in self._queue:
+            metadata = task.metadata
+            current_earliest = metadata.get("group_earliest_timestamp", MAX_TIMESTAMP)
+            raw_priority = metadata.get("priority")
+            try:
+                priority_level = Priority(raw_priority)
+            except (TypeError, ValueError):
+                priority_level = None
+
+            if priority_level is None or priority_level == Priority.NORMAL:
+                metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
+                if task_count[task.user_id] >= 3:
+                    metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
+                    metadata["priority"] = Priority.HIGH
+                else:
+                    metadata["priority"] = Priority.NORMAL
+            else:
+                metadata["group_earliest_timestamp"] = current_earliest
+                metadata["priority"] = priority_level
 
         self._queue.sort(key=self._bank_statements_sort_key)
 
@@ -198,7 +186,7 @@ class Queue:
         timestamps = [self._timestamp_for_task(task) for task in self._queue]
         oldest_timestamp = min(timestamps)
         newest_timestamp = max(timestamps)
-        return int((newest_timestamp - oldest_timestamp).total_seconds())
+        return (newest_timestamp - oldest_timestamp).total_seconds()
 
     def purge(self):
         self._queue.clear()
