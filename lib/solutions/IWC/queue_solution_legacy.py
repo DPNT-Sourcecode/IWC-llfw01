@@ -58,14 +58,21 @@ class Queue:
         return sum(1 for task in self._queue if task.user_id == user_id)
 
     def _bank_statements_sort_key(self, task: TaskSubmission):
-        is_bank = 1 if self._is_bank_statements_provider(task) else 0
+        is_bank = self._is_bank_statements_provider(task)
         user_task_count = self._user_task_count(task.user_id)
 
-        # FOr users with 3 tasks it goes at the back of their queue
-        # for users with <3 tasks it goes to back globally 
-        deprioritize = 1 if (is_bank and user_task_count < 3) else 0
-        deprioritize_within_user_queue = 1 if (is_bank and user_task_count >= 3) else 0
-        return (deprioritize, self._priority_for_task(task), self._earliest_group_timestamp_for_task(task), deprioritize_within_user_queue, self._timestamp_for_task(task))
+        # For users with <3 tasks, bank_statements must be globally last
+        # For users with >=3 tasks, bank_statements must be last among their own tasks
+        # We use a very large number to push these to the end globally
+        if is_bank and user_task_count < 3:
+            # Globally deprioritize
+            return (2, self._timestamp_for_task(task))
+        elif is_bank and user_task_count >= 3:
+            # Deprioritize within user's tasks, but still respect Rule of 3
+            return (1, self._priority_for_task(task), self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
+        else:
+            # Normal tasks
+            return (0, self._priority_for_task(task), self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
     
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
@@ -264,4 +271,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
