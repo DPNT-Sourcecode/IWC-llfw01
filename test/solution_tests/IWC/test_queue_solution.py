@@ -36,3 +36,15 @@ def test_timestamp_ordering() -> None:
         call_dequeue().expect("provider_z", 9),
         call_dequeue().expect("provider_x", 7),
     ])
+
+
+def test_dependencys() -> None:
+    run_queue([
+        call_enqueue(
+            "provider_dep", 10, iso_ts(delta_minutes=0)
+        ).expect(3),
+        call_size().expect(3),
+        call_dequeue().expect("provider_a", 1),
+        call_dequeue().expect("provider_b", 2),
+        call_dequeue().expect("provider_dep", 10),
+    ])
