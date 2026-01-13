@@ -84,11 +84,11 @@ class Queue:
         if is_bank_and_old and priority == Priority.HIGH and group_earliest_raw != MAX_TIMESTAMP:
             return (priority, 0, group_timestamp, task_timestamp, -1)
         
-        # 2. Time-based elevation without Rule of 3: Still respect HIGH priority from other users
-        # but come before NORMAL priority tasks, sorted by timestamp
-        # Use -1 tiebreaker to ensure elevated bank comes before non-elevated with same timestamp
+        # 2. Time-based elevation without Rule of 3: Between HIGH and NORMAL
+        # Respect timestamp ordering: sort as NORMAL priority but with -1 tiebreaker
+        # This way it comes before NORMAL tasks with same timestamp but after NORMAL tasks with older timestamps
         if is_bank_and_old:
-            return (priority, 0, group_timestamp, task_timestamp, -1)
+            return (Priority.NORMAL, 0, group_timestamp, task_timestamp, -1)
         
         # 3. Rule of 3 elevation: Treat high priority bank statements as high priority, 
         # but apply penalty to put them after other high priority tasks of the same user.
@@ -308,9 +308,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
-
-
-
-
