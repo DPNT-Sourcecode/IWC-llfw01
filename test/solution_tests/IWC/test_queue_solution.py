@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from .utils import call_dequeue, call_enqueue, call_size, iso_ts, run_queue
 
 
@@ -137,4 +138,74 @@ def test_time_sensitive_bank_statements() -> None:
         call_dequeue().expect("id_verification", 1),  # Oldest timestamp
         call_dequeue().expect("bank_statements", 2),  # Old enough, elevated
         call_dequeue().expect("companies_house", 3),  # Newest timestamp
+    ])
+
+
+def test_iwc_r5_s5() -> None:
+    """IWC_R5_S5: Bank statements with same timestamp as other task"""
+    run_queue([
+        call_enqueue("companies_house", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(2),
+        call_enqueue("id_verification", 6, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=6)).expect(3),
+        call_dequeue().expect("companies_house", 1),  # Same timestamp, companies_house first (insertion order)
+        call_dequeue().expect("bank_statements", 1),  # Then bank_statements (elevated due to 6 min age)
+        call_dequeue().expect("id_verification", 6),
+    ])
+
+
+def test_iwc_r5_s6() -> None:
+    """IWC_R5_S6: Multiple users with bank_statements"""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(1),
+        call_enqueue("companies_house", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=1)).expect(2),
+        call_enqueue("id_verification", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=6)).expect(3),
+        call_enqueue("bank_statements", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=7)).expect(4),
+        call_dequeue().expect("companies_house", 2),  # User 2 has Rule of 3
+        call_dequeue().expect("id_verification", 2),
+        call_dequeue().expect("bank_statements", 2),  # User 2's bank_statements (not old enough)
+        call_dequeue().expect("bank_statements", 1),  # User 1's bank_statements (globally deprioritized)
+    ])
+
+
+def test_iwc_r5_s7() -> None:
+    """IWC_R5_S7: Complex scenario with Rule of 3 and elevated bank_statements"""
+    run_queue([
+        call_enqueue("companies_house", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=1)).expect(2),
+        call_enqueue("id_verification", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=2)).expect(3),
+        call_enqueue("bank_statements", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=7)).expect(4),
+        call_enqueue("companies_house", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=8)).expect(5),
+        call_enqueue("id_verification", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=9)).expect(6),
+        call_dequeue().expect("companies_house", 2),  # User 2 Rule of 3
+        call_dequeue().expect("id_verification", 2),
+        call_dequeue().expect("bank_statements", 1),  # User 1 bank_statements elevated (8 min old from newest)
+        call_dequeue().expect("companies_house", 1),  # User 1 Rule of 3
+        call_dequeue().expect("id_verification", 1),
+        call_dequeue().expect("bank_statements", 2),  # User 2 bank_statements (not old enough)
+    ])
+
+
+def test_iwc_r5_s8() -> None:
+    """IWC_R5_S8: Multiple bank_statements tasks that are old enough"""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(2),
+        call_enqueue("companies_house", 3, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=1)).expect(3),
+        call_enqueue("id_verification", 3, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=7)).expect(4),
+        call_dequeue().expect("bank_statements", 1),  # Both elevated, timestamp order
+        call_dequeue().expect("bank_statements", 2),
+        call_dequeue().expect("companies_house", 3),
+        call_dequeue().expect("id_verification", 3),
+    ])
+
+
+def test_iwc_r5_s11() -> None:
+    """IWC_R5_S11: Elevated bank_statements respects older timestamps"""
+    run_queue([
+        call_enqueue("companies_house", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=7)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=1)).expect(2),
+        call_enqueue("companies_house", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(3),
+        call_dequeue().expect("companies_house", 2),  # Oldest timestamp
+        call_dequeue().expect("bank_statements", 1),  # Elevated, but after older companies_house(2)
+        call_dequeue().expect("companies_house", 1),  # Newest
     ])
