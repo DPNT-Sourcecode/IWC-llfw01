@@ -50,6 +50,7 @@ REGISTERED_PROVIDERS: list[Provider] = [
 class Queue:
     def __init__(self):
         self._queue = []
+        self._newest_timestamp_cache = None  # Cache for sort key calculation
 
     def _is_bank_statements_provider(self, task: TaskSubmission) -> bool:
         return task.provider == "bank_statements"
@@ -62,11 +63,8 @@ class Queue:
         priority = self._priority_for_task(task)
         task_timestamp = self._timestamp_for_task(task)
 
-        if is_bank and self._queue:
-            newest_timestamp = max(
-                self._timestamp_for_task(t) for t in self._queue
-            )   
-            task_age_seconds = (newest_timestamp - task_timestamp).total_seconds()
+        if is_bank and self._newest_timestamp_cache is not None:
+            task_age_seconds = (self._newest_timestamp_cache - task_timestamp).total_seconds()
             is_bank_and_old = task_age_seconds >= 300 # 5 minutes or more
         else:
             is_bank_and_old = False
@@ -178,7 +176,25 @@ class Queue:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
 
+        # Pre-calculate newest timestamp for bank_statements age calculation
+        if self._queue:
+            self._newest_timestamp_cache = max(self._timestamp_for_task(t) for t in self._queue)
+        else:
+            self._newest_timestamp_cache = None
+
+        # DEBUG
+        print(f"\nDEBUG: Queue BEFORE sort (size={len(self._queue)}):")
+        for i, t in enumerate(self._queue):
+            key = self._bank_statements_sort_key(t)
+            print(f"  [{i}] {t.provider:20s} key={key[0] if len(key) > 0 else 'N/A'}")
+
         self._queue.sort(key=self._bank_statements_sort_key)
+
+        # DEBUG
+        print(f"\nDEBUG: Queue AFTER sort (size={len(self._queue)}):")
+        for i, t in enumerate(self._queue):
+            key = self._bank_statements_sort_key(t)
+            print(f"  [{i}] {t.provider:20s} key={key[0] if len(key) > 0 else 'N/A'}")
 
         task = self._queue.pop(0)
         return TaskDispatch(
@@ -286,5 +302,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
