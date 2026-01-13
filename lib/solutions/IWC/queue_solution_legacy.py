@@ -80,17 +80,17 @@ class Queue:
             is_bank_and_old = False
 
         if is_bank_and_old:
-            # Elevated bank_statements: timestamp first, then elevation flag=0 (before normal tasks within same timestamp)
-            return (task_timestamp, 0, priority, 0, -1)
+            # Elevated bank_statements: use own timestamp, priority, then elevation flag=0
+            return (task_timestamp, priority, 0, task_timestamp, 0)
         elif  is_bank and priority == Priority.NORMAL:
             # Globally deprioritize - use MAX_TIMESTAMP to sort last
-            return (MAX_TIMESTAMP, 1, 3, 0, 0)
+            return (MAX_TIMESTAMP, 3, 1, MAX_TIMESTAMP, 0)
         elif is_bank:
             # Bank statements for users with HIGH priority (Rule of 3): deprioritize within their own tasks
-            return (group_timestamp, 1, priority, 1, 0)
+            return (group_timestamp, priority, 1, task_timestamp, 0)
         else:
             # Normal tasks - use group timestamp (or own timestamp if not in Rule of 3)
-            return (group_timestamp, 1, priority, 0, 0)
+            return (group_timestamp, priority, 0, task_timestamp, 0)
     
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
@@ -306,7 +306,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
-
-

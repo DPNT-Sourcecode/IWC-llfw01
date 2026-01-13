@@ -209,5 +209,3 @@ def test_iwc_r5_s11() -> None:
         call_dequeue().expect("bank_statements", 1),  # Elevated, but after older companies_house(2)
         call_dequeue().expect("companies_house", 1),  # Newest
     ])
-
-
