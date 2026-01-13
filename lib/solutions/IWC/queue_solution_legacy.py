@@ -80,8 +80,19 @@ class Queue:
 
         # Sort Key Structure: (Priority, SubPriority, GroupTimestamp, TaskTimestamp, BankPenalty)
         
-        # 1. Rule of 3 tasks (HIGH priority) - always come first
-        if priority == Priority.HIGH:
+        # Priority levels:
+        # 0.5 = Time-sensitive bank_statements (5+ min old) - comes BEFORE Rule of 3
+        # 1 = Rule of 3 tasks (HIGH)
+        # 2 = NORMAL tasks
+        # 3 = Deprioritized bank_statements
+        
+        # 1. Time-sensitive bank_statements without Rule of 3
+        # These are elevated to come BEFORE Rule of 3 tasks
+        if is_bank_and_old and priority != Priority.HIGH:
+            return (0.5, 0, task_timestamp, task_timestamp, 0)
+        
+        # 2. Rule of 3 tasks (HIGH priority)
+        elif priority == Priority.HIGH:
             if is_bank and not is_bank_and_old:
                 # Rule of 3 bank_statements, not time-sensitive: deprioritize within user's tasks
                 return (priority, 0, group_timestamp, task_timestamp, 1)
@@ -91,11 +102,6 @@ class Queue:
             else:
                 # Rule of 3 non-bank tasks
                 return (priority, 0, group_timestamp, task_timestamp, 0)
-        
-        # 2. Time-sensitive bank_statements without Rule of 3
-        # These are elevated to a middle priority (1.5) - after HIGH but before NORMAL
-        elif is_bank_and_old:
-            return (1.5, 0, task_timestamp, task_timestamp, 0)
         
         # 3. Standard NORMAL priority tasks
         elif not is_bank:
@@ -310,4 +316,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

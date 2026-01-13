@@ -1,5 +1,7 @@
-from lib.solutions.IWC.queue_solution_legacy import Queue
-from lib.solutions.IWC.task_types import TaskSubmission
+import sys
+sys.path.insert(0, 'lib')
+from solutions.IWC.queue_solution_legacy import Queue
+from solutions.IWC.task_types import TaskSubmission
 
 def iso_ts(delta_minutes):
     from datetime import datetime, timedelta
@@ -53,5 +55,20 @@ for i, task in enumerate(queue2._queue):
 
 print("\nDequeuing:")
 for i in range(6):
-    result = queue2.dequeue()
-    print(f"  {i+1}. {result.provider}, user {result.user_id}")
+    print(f"Queue size before dequeue: {queue2.size}")
+    if queue2.size == 0:
+        print("  Queue is empty!")
+        break
+    try:
+        result = queue2.dequeue()
+        if result:
+            print(f"  {i+1}. {result.provider}, user {result.user_id}")
+        else:
+            print(f"  {i+1}. None returned!")
+    except Exception as e:
+        print(f"  {i+1}. ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+
+print("\nTest complete!")
+
