@@ -186,20 +186,8 @@ class Queue:
                 metadata.setdefault("priority", Priority.NORMAL)
                 metadata.setdefault("group_earliest_timestamp", MAX_TIMESTAMP)
                 self._queue.append(task)
-            
-        # Update priorities and sort
-        self._update_priorities()
-        self._queue.sort(key=self._bank_statements_sort_key)
         
-        # Return 1-based index of the *added item*
-        try:
-            target_index = next(
-                i for i, t in enumerate(self._queue) 
-                if t.provider == item.provider and t.user_id == item.user_id
-            )
-            return target_index + 1
-        except StopIteration:
-            return self.size
+        return self.size
 
     def dequeue(self):
         if self.size == 0:
@@ -314,6 +302,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
