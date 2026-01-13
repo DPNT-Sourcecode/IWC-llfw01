@@ -60,10 +60,7 @@ class Queue:
     def _bank_statements_sort_key(self, task: TaskSubmission):
         is_bank = self._is_bank_statements_provider(task)
         user_task_count = self._user_task_count(task.user_id)
-
         # For users with <3 tasks, bank_statements must be globally last
-        # For users with >=3 tasks, bank_statements must be last among their own tasks
-        # We use a very large number to push these to the end globally
         if is_bank and user_task_count < 3:
             # Globally deprioritize
             return (2, self._timestamp_for_task(task))
@@ -135,39 +132,41 @@ class Queue:
                 self._queue.append(task)
         return self.size
 
-    def dequeue(self):
-        if self.size == 0:
-            return None
+def dequeue(self):
+    if self.size == 0:
+        return None
 
-        user_ids = {task.user_id for task in self._queue}
-        task_count = {}
-        priority_timestamps = {}
-        for user_id in user_ids:
-            user_tasks = [t for t in self._queue if t.user_id == user_id]
-            earliest_timestamp = sorted(user_tasks, key=lambda t: t.timestamp)[0].timestamp
-            priority_timestamps[user_id] = earliest_timestamp
-            task_count[user_id] = len(user_tasks)
+    # Update metadata for Rule of 3 and priorities
+    user_ids = {task.user_id for task in self._queue}
+    task_count = {}
+    priority_timestamps = {}
+    for user_id in user_ids:
+        user_tasks = [t for t in self._queue if t.user_id == user_id]
+        earliest_timestamp = sorted(user_tasks, key=lambda t: self._timestamp_for_task(t))[0].timestamp
+        priority_timestamps[user_id] = earliest_timestamp
+        task_count[user_id] = len(user_tasks)
 
-        for task in self._queue:
-            metadata = task.metadata
-            current_earliest = metadata.get("group_earliest_timestamp", MAX_TIMESTAMP)
-            raw_priority = metadata.get("priority")
-            try:
-                priority_level = Priority(raw_priority)
-            except (TypeError, ValueError):
-                priority_level = None
+    for task in self._queue:
+        metadata = task.metadata
+        current_earliest = metadata.get("group_earliest_timestamp", MAX_TIMESTAMP)
+        raw_priority = metadata.get("priority")
+        try:
+            priority_level = Priority(raw_priority)
+        except (TypeError, ValueError):
+            priority_level = None
 
-            if priority_level is None or priority_level == Priority.NORMAL:
-                metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
-                if task_count[task.user_id] >= 3:
-                    metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
-                    metadata["priority"] = Priority.HIGH
-                else:
-                    metadata["priority"] = Priority.NORMAL
+        if priority_level is None or priority_level == Priority.NORMAL:
+            metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
+            if task_count[task.user_id] >= 3:
+                metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
+                metadata["priority"] = Priority.HIGH
             else:
-                metadata["group_earliest_timestamp"] = current_earliest
-                metadata["priority"] = priority_level
+                metadata["priority"] = Priority.NORMAL
+        else:
+            metadata["group_earliest_timestamp"] = current_earliest
+            metadata["priority"] = priority_level
 
+        # Sort with the new deprioritization logic
         self._queue.sort(key=self._bank_statements_sort_key)
 
         task = self._queue.pop(0)
@@ -175,7 +174,7 @@ class Queue:
             provider=task.provider,
             user_id=task.user_id,
         )
-
+    
     @property
     def size(self):
         return len(self._queue)
@@ -271,5 +270,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
