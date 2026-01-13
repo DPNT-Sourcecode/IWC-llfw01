@@ -177,11 +177,11 @@ def test_iwc_r5_s7() -> None:
         call_enqueue("companies_house", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=8)).expect(5),
         call_enqueue("id_verification", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=9)).expect(6),
         call_dequeue().expect("companies_house", 2),  # User 2 Rule of 3
-        call_dequeue().expect("id_verification", 2),
         call_dequeue().expect("bank_statements", 1),  # User 1 bank_statements elevated (8 min old from newest)
+        call_dequeue().expect("id_verification", 2),
+        call_dequeue().expect("bank_statements", 2),  # User 2 bank_statements (not old enough)
         call_dequeue().expect("companies_house", 1),  # User 1 Rule of 3
         call_dequeue().expect("id_verification", 1),
-        call_dequeue().expect("bank_statements", 2),  # User 2 bank_statements (not old enough)
     ])
 
 
@@ -209,4 +209,5 @@ def test_iwc_r5_s11() -> None:
         call_dequeue().expect("bank_statements", 1),  # Elevated, but after older companies_house(2)
         call_dequeue().expect("companies_house", 1),  # Newest
     ])
+
 
