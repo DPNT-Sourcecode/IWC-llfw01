@@ -95,16 +95,22 @@ class Queue:
 
         for task in tasks:
             # check for duplicates
-            duplicate_indexes = next(
+            duplicate_index = next(
                 (i for i, t in enumerate(self._queue)
                  if t.provider == task.provider and t.user_id == task.user_id),
                 None)
-            
-            metadata = task.metadata
-            metadata.setdefault("priority", Priority.NORMAL)
-            metadata.setdefault("group_earliest_timestamp", MAX_TIMESTAMP)
-            self._queue.append(task)
-        return self.size
+            if duplicate_index is not None:
+                exisiting_task = self._queue[duplicate_index]
+                # Keep the earliest timestamp
+                if self._timestamp_for_task(task) < self._timestamp_for_task(exisiting_task):
+                    self._queue[duplicate_index] = task
+                continue
+            else:
+                metadata = task.metadata
+                metadata.setdefault("priority", Priority.NORMAL)
+                metadata.setdefault("group_earliest_timestamp", MAX_TIMESTAMP)
+                self._queue.append(task)
+            return self.size
 
     def dequeue(self):
         if self.size == 0:

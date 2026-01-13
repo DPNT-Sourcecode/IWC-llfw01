@@ -48,3 +48,12 @@ def test_dependencys() -> None:
         call_dequeue().expect("provider_b", 2),
         call_dequeue().expect("provider_dep", 10),
     ])
+
+
+def test_deduplication() -> None:
+    run_queue([
+        call_enqueue("provider_dup", 5, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("provider_dup", 5, iso_ts(delta_minutes=1)).expect(1),
+        call_size().expect(1),
+        call_dequeue().expect("provider_dup", 5),
+    ])
