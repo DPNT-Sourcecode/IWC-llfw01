@@ -126,3 +126,15 @@ def test_queue_age() -> None:
         call_dequeue().expect("companies_house", 3),
         call_age().expect(0),  # Empty queue
     ])
+
+def test_time_sensitive_bank_statements() -> None:
+    """Test IWC_R5: Bank statements with 5+ minute internal age get elevated"""
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=1)).expect(2),
+        call_enqueue("companies_house", 3, iso_ts(delta_minutes=7)).expect(3),
+        # bank_statements is 6 minutes older than companies_house, so it gets elevated
+        call_dequeue().expect("id_verification", 1),  # Oldest timestamp
+        call_dequeue().expect("bank_statements", 2),  # Old enough, elevated
+        call_dequeue().expect("companies_house", 3),  # Newest timestamp
+    ])

@@ -60,9 +60,20 @@ class Queue:
     def _bank_statements_sort_key(self, task: TaskSubmission):
         is_bank = self._is_bank_statements_provider(task)
         priority = self._priority_for_task(task)
-        
-        # For bank_statements tasks with NORMAL priority (no Rule of 3), globally deprioritize
-        if is_bank and priority == Priority.NORMAL:
+        task_timestamp = self._timestamp_for_task(task)
+
+        if is_bank and self._queue:
+            newest_timestamp = max(
+                self._timestamp_for_task(t) for t in self._queue
+            )   
+            task_age_seconds = (newest_timestamp - task_timestamp).total_seconds()
+            is_bank_and_old = task_age_seconds > 300 # 5 minutes
+        else:
+            is_bank_and_old = False
+
+        if is_bank_and_old:
+            return(0, task_timestamp)
+        elif  is_bank and priority == Priority.NORMAL:
             # Globally deprioritize - use a high priority number to sort last
             return (3, 0, MAX_TIMESTAMP, self._timestamp_for_task(task))
         elif is_bank:
