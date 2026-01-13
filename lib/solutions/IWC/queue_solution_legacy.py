@@ -80,22 +80,26 @@ class Queue:
 
         # Sort Key Structure: (Priority, BankPenalty, GroupTimestamp, TaskTimestamp, TieBreaker)
         
-        # 1. Time-based elevation: For old bank_statements, treat as normal priority task
-        # This takes precedence over Rule of 3 deprioritization
-        # Use tiebreaker -1 to ensure elevated bank_statements come before other tasks with same timestamp
+        # 1. Time-based elevation with Rule of 3: Full HIGH priority, no bank penalty
+        if is_bank_and_old and priority == Priority.HIGH and group_earliest_raw != MAX_TIMESTAMP:
+            return (priority, 0, group_timestamp, task_timestamp, -1)
+        
+        # 2. Time-based elevation without Rule of 3: Still respect HIGH priority from other users
+        # but come before NORMAL priority tasks, sorted by timestamp
+        # Use -1 tiebreaker to ensure elevated bank comes before non-elevated with same timestamp
         if is_bank_and_old:
             return (priority, 0, group_timestamp, task_timestamp, -1)
         
-        # 2. Rule of 3 elevation: Treat high priority bank statements as high priority, 
+        # 3. Rule of 3 elevation: Treat high priority bank statements as high priority, 
         # but apply penalty to put them after other high priority tasks of the same user.
         if is_bank and priority == Priority.HIGH and group_earliest_raw != MAX_TIMESTAMP:
             return (priority, 1, group_timestamp, task_timestamp, 0)
         
-        # 3. Standard Bank Statement: Deprioritized (Priority 3)
+        # 4. Standard Bank Statement: Deprioritized (Priority 3)
         elif is_bank:
             return (3, 1, task_timestamp, task_timestamp, 0)
         
-        # 4. All other tasks
+        # 5. All other tasks
         else:
             return (priority, 0, group_timestamp, task_timestamp, 0)
     
@@ -304,6 +308,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
