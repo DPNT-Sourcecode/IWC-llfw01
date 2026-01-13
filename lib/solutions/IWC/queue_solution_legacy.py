@@ -79,11 +79,16 @@ class Queue:
         else:
             is_bank_and_old = False
 
+        # Check if this bank_statements has HIGH priority but no active Rule of 3 group
+        # (group_earliest is MAX_TIMESTAMP means no active group)
+        is_bank_high_no_group = is_bank and priority == Priority.HIGH and group_earliest_raw == MAX_TIMESTAMP
+
         if is_bank_and_old:
-            # Elevated bank_statements: use own timestamp, priority, then elevation flag=0
-            return (task_timestamp, priority, 0, task_timestamp, 0)
-        elif  is_bank and priority == Priority.NORMAL:
-            # Globally deprioritize - use MAX_TIMESTAMP to sort last
+            # Elevated bank_statements: use own timestamp, effective priority between HIGH(1) and NORMAL(2)
+            # This allows it to skip ahead of NORMAL tasks but not HIGH tasks with same timestamp
+            return (task_timestamp, 1.5, 0, task_timestamp, 0)
+        elif is_bank and (priority == Priority.NORMAL or is_bank_high_no_group):
+            # Globally deprioritize - includes bank_statements without active Rule of 3
             return (MAX_TIMESTAMP, 3, 1, MAX_TIMESTAMP, 0)
         elif is_bank:
             # Bank statements for users with HIGH priority (Rule of 3): deprioritize within their own tasks
@@ -306,3 +311,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
