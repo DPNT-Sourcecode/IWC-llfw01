@@ -142,13 +142,13 @@ def test_time_sensitive_bank_statements() -> None:
 
 
 def test_iwc_r5_s5() -> None:
-    """IWC_R5_S5: Bank statements with same timestamp as other task"""
+    """IWC_R5_S5: Bank statements with same timestamp as other task - elevated comes first"""
     run_queue([
         call_enqueue("companies_house", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(1),
         call_enqueue("bank_statements", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(2),
         call_enqueue("id_verification", 6, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=6)).expect(3),
-        call_dequeue().expect("companies_house", 1),  # Same timestamp, companies_house first (insertion order)
-        call_dequeue().expect("bank_statements", 1),  # Then bank_statements (elevated due to 6 min age)
+        call_dequeue().expect("bank_statements", 1),  # Elevated (6 min age), comes first despite same timestamp
+        call_dequeue().expect("companies_house", 1),
         call_dequeue().expect("id_verification", 6),
     ])
 
