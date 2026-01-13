@@ -65,10 +65,12 @@ class Queue:
             # Globally deprioritize
             return (2, self._timestamp_for_task(task))
         elif is_bank:
-            # All non-bank_statements tasks (0, ...) come before any bank_statements (1, ...)
-            return (1, task.user_id, self._priority_for_task(task), self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
+            # Bank statements for users with >=3 tasks: deprioritize within their own tasks
+            # but still respect Rule of 3 priority over other users
+            return (self._priority_for_task(task), 1, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
         else:
-            return (0, self._priority_for_task(task), self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task), task.user_id)
+            # Normal tasks
+            return (self._priority_for_task(task), 0, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
     
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
@@ -267,5 +269,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
