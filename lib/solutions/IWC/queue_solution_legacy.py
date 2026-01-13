@@ -70,7 +70,9 @@ class Queue:
             is_bank_and_old = False
 
         if is_bank_and_old:
-            return (0, 0, task_timestamp, task_timestamp)
+            # Elevated bank_statements: treat as normal task, sorted by priority and timestamp
+            # This allows it to skip global deprioritization but still respect older tasks
+            return (priority, 0, self._earliest_group_timestamp_for_task(task), task_timestamp)
         elif  is_bank and priority == Priority.NORMAL:
             # Globally deprioritize - use a high priority number to sort last
             return (3, 0, MAX_TIMESTAMP, self._timestamp_for_task(task))
@@ -182,19 +184,7 @@ class Queue:
         else:
             self._newest_timestamp_cache = None
 
-        # DEBUG
-        print(f"\nDEBUG: Queue BEFORE sort (size={len(self._queue)}):")
-        for i, t in enumerate(self._queue):
-            key = self._bank_statements_sort_key(t)
-            print(f"  [{i}] {t.provider:20s} key={key[0] if len(key) > 0 else 'N/A'}")
-
         self._queue.sort(key=self._bank_statements_sort_key)
-
-        # DEBUG
-        print(f"\nDEBUG: Queue AFTER sort (size={len(self._queue)}):")
-        for i, t in enumerate(self._queue):
-            key = self._bank_statements_sort_key(t)
-            print(f"  [{i}] {t.provider:20s} key={key[0] if len(key) > 0 else 'N/A'}")
 
         task = self._queue.pop(0)
         return TaskDispatch(
@@ -302,6 +292,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
-
