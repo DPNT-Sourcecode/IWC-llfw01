@@ -78,38 +78,38 @@ class Queue:
         else:
             is_bank_and_old = False
 
-        # Sort Key Structure: (Priority, SubPriority, GroupTimestamp, TaskTimestamp, BankPenalty)
+        # Sort Key Structure: (MainTimestamp, Priority, GroupTimestamp, TaskTimestamp, BankPenalty)
         
-        # Priority levels:
-        # 0.5 = Time-sensitive bank_statements (5+ min old) - comes BEFORE Rule of 3
-        # 1 = Rule of 3 tasks (HIGH)
-        # 2 = NORMAL tasks
-        # 3 = Deprioritized bank_statements
+        # Sorting strategy:
+        # 1. Elevated bank_statements: sorted by task timestamp, priority 0
+        # 2. Rule of 3: sorted by group earliest timestamp, priority 1
+        # 3. NORMAL: sorted by task timestamp, priority 2
+        # 4. Deprioritized bank: sorted by task timestamp, priority 3
         
-        # 1. Time-sensitive bank_statements without Rule of 3
-        # These are elevated to come BEFORE Rule of 3 tasks
-        if is_bank_and_old and priority != Priority.HIGH:
-            return (0.5, 0, task_timestamp, task_timestamp, 0)
-        
-        # 2. Rule of 3 tasks (HIGH priority)
-        elif priority == Priority.HIGH:
+        # Rule of 3 tasks (HIGH priority)
+        if priority == Priority.HIGH:
             if is_bank and not is_bank_and_old:
                 # Rule of 3 bank_statements, not time-sensitive: deprioritize within user's tasks
-                return (priority, 0, group_timestamp, task_timestamp, 1)
+                return (group_timestamp, 1, group_timestamp, task_timestamp, 1)
             elif is_bank and is_bank_and_old:
-                # Rule of 3 bank_statements, time-sensitive: elevated within user's tasks
-                return (priority, 0, group_timestamp, task_timestamp, -1)
+                # Rule of 3 bank_statements, time-sensitive: sort by group timestamp, elevated within group
+                return (group_timestamp, 1, group_timestamp, task_timestamp, -1)
             else:
                 # Rule of 3 non-bank tasks
-                return (priority, 0, group_timestamp, task_timestamp, 0)
+                return (group_timestamp, 1, group_timestamp, task_timestamp, 0)
         
-        # 3. Standard NORMAL priority tasks
+        # Time-sensitive bank_statements without Rule of 3
+        # Sorted by task timestamp, with priority 0 (comes before Rule of 3 tasks at same/later timestamp)
+        elif is_bank_and_old:
+            return (task_timestamp, 0, task_timestamp, task_timestamp, 0)
+        
+        # Standard NORMAL priority tasks
         elif not is_bank:
-            return (Priority.NORMAL, 0, task_timestamp, task_timestamp, 0)
+            return (task_timestamp, 2, task_timestamp, task_timestamp, 0)
         
-        # 4. Standard bank_statements (not time-sensitive, no Rule of 3)
+        # Standard bank_statements (not time-sensitive, no Rule of 3)
         else:
-            return (3, 0, task_timestamp, task_timestamp, 0)
+            return (task_timestamp, 3, task_timestamp, task_timestamp, 0)
     
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
@@ -316,5 +316,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
