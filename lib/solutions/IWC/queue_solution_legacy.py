@@ -82,8 +82,9 @@ class Queue:
         
         # 1. Time-based elevation: For old bank_statements, treat as normal priority task
         # This takes precedence over Rule of 3 deprioritization
+        # Use tiebreaker -1 to ensure elevated bank_statements come before other tasks with same timestamp
         if is_bank_and_old:
-            return (priority, 0, group_timestamp, task_timestamp, 0)
+            return (priority, 0, group_timestamp, task_timestamp, -1)
         
         # 2. Rule of 3 elevation: Treat high priority bank statements as high priority, 
         # but apply penalty to put them after other high priority tasks of the same user.
@@ -303,6 +304,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
