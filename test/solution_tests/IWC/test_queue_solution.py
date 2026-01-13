@@ -138,3 +138,53 @@ def test_time_sensitive_bank_statements() -> None:
         call_dequeue().expect("bank_statements", 2),  # Old enough, elevated
         call_dequeue().expect("companies_house", 3),  # Newest timestamp
     ])
+
+
+def test_iwc_r5_s2() -> None:
+    """IWC_R5_S2: Bank statements old enough, no rule of 3"""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("companies_house", 1, iso_ts(delta_minutes=1)).expect(2),
+        call_enqueue("id_verification", 6, iso_ts(delta_minutes=6)).expect(3),
+        call_dequeue().expect("bank_statements", 1),  # Elevated
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("id_verification", 6),
+    ])
+
+
+def test_iwc_r5_s3() -> None:
+    """IWC_R5_S3: Bank statements with Rule of 3 and time-sensitive"""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("companies_house", 1, iso_ts(delta_minutes=1)).expect(2),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=6)).expect(3),
+        call_dequeue().expect("bank_statements", 1),  # Rule of 3 + elevated
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("id_verification", 1),
+    ])
+
+
+def test_iwc_r5_s5() -> None:
+    """IWC_R5_S5: Bank statements elevated with same timestamp"""
+    run_queue([
+        call_enqueue("companies_house", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(2),
+        call_enqueue("id_verification", 6, iso_ts(delta_minutes=6)).expect(3),
+        call_dequeue().expect("bank_statements", 1),  # Elevated (6 min old)
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("id_verification", 6),
+    ])
+
+
+def test_iwc_r5_s10() -> None:
+    """IWC_R5_S10: Rule of 3 with bank_statements not elevated"""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=1)).expect(2),
+        call_enqueue("companies_house", 1, iso_ts(delta_minutes=2)).expect(3),
+        call_enqueue("companies_house", 2, iso_ts(delta_minutes=3)).expect(4),
+        call_dequeue().expect("id_verification", 1),
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("companies_house", 2),
+        call_dequeue().expect("bank_statements", 1),  # Deprioritized (not old enough)
+    ])

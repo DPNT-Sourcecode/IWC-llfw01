@@ -71,6 +71,7 @@ class Queue:
         else:
             group_timestamp = group_earliest_raw
 
+        # Check if bank_statements is time-sensitive (5+ minutes old)
         if is_bank and self._newest_timestamp_cache is not None:
             task_age_seconds = (self._newest_timestamp_cache - task_timestamp).total_seconds()
             is_bank_and_old = task_age_seconds >= 300 
@@ -79,15 +80,15 @@ class Queue:
 
         # Sort Key Structure: (Priority, BankPenalty, GroupTimestamp, TaskTimestamp, TieBreaker)
         
-        # 1. Rule of 3 elevation: Treat high priority bank statements as high priority, 
+        # 1. Time-based elevation: For old bank_statements, treat as normal priority task
+        # This takes precedence over Rule of 3 deprioritization
+        if is_bank_and_old:
+            return (priority, 0, group_timestamp, task_timestamp, 0)
+        
+        # 2. Rule of 3 elevation: Treat high priority bank statements as high priority, 
         # but apply penalty to put them after other high priority tasks of the same user.
         if is_bank and priority == Priority.HIGH and group_earliest_raw != MAX_TIMESTAMP:
             return (priority, 1, group_timestamp, task_timestamp, 0)
-
-        # 2. Time-based elevation: For old bank_statements, treat as NORMAL priority 
-        # but sort by timestamp across all tasks (no deprioritization)
-        if is_bank_and_old:
-            return (priority, 0, group_timestamp, task_timestamp, 0)
         
         # 3. Standard Bank Statement: Deprioritized (Priority 3)
         elif is_bank:
