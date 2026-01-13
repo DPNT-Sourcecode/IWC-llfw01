@@ -62,6 +62,16 @@ class Queue:
         is_bank = self._is_bank_statements_provider(task)
         priority = self._priority_for_task(task)
         task_timestamp = self._timestamp_for_task(task)
+        
+        # Get group timestamp, or use task timestamp if not in a group
+        group_earliest_raw = self._earliest_group_timestamp_for_task(task)
+        if group_earliest_raw == MAX_TIMESTAMP:
+            # Not in a Rule of 3 group, use own timestamp
+            group_timestamp = task_timestamp
+        elif isinstance(group_earliest_raw, str):
+            group_timestamp = self._timestamp_for_task(TaskSubmission(provider="", user_id=0, timestamp=group_earliest_raw))
+        else:
+            group_timestamp = group_earliest_raw
 
         if is_bank and self._newest_timestamp_cache is not None:
             task_age_seconds = (self._newest_timestamp_cache - task_timestamp).total_seconds()
@@ -70,18 +80,17 @@ class Queue:
             is_bank_and_old = False
 
         if is_bank_and_old:
-            # Elevated bank_statements: elevation flag=0 makes them come first (before HIGH priority)
-            return (0, priority, 0, self._earliest_group_timestamp_for_task(task), task_timestamp, -1)
+            # Elevated bank_statements: timestamp first, then elevation flag=0 (before normal tasks within same timestamp)
+            return (task_timestamp, 0, priority, 0, -1)
         elif  is_bank and priority == Priority.NORMAL:
-            # Globally deprioritize - elevation flag=1, priority=3 to sort last
-            return (1, 3, 0, MAX_TIMESTAMP, self._timestamp_for_task(task), 0)
+            # Globally deprioritize - use MAX_TIMESTAMP to sort last
+            return (MAX_TIMESTAMP, 1, 3, 0, 0)
         elif is_bank:
             # Bank statements for users with HIGH priority (Rule of 3): deprioritize within their own tasks
-            # but still respect Rule of 3 priority over other users
-            return (1, priority, 1, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task), 0)
+            return (group_timestamp, 1, priority, 1, 0)
         else:
-            # Normal tasks - elevation flag=1, normal priority
-            return (1, priority, 0, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task), 0)
+            # Normal tasks - use group timestamp (or own timestamp if not in Rule of 3)
+            return (group_timestamp, 1, priority, 0, 0)
     
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
@@ -291,4 +300,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
