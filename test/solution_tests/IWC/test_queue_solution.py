@@ -95,3 +95,34 @@ def test_deprioritize_bank_statements_with_rule_of_3_different_timestamps() -> N
         call_dequeue().expect("bank_statements", 1),  # User 1's bank_statements before user 2
         call_dequeue().expect("companies_house", 2),
     ])
+
+
+def test_queue_age() -> None:
+    """Test IWC_R4: Queue internal age based on task timestamps"""
+    from .utils import QueueActionBuilder
+    
+    def call_age() -> QueueActionBuilder:
+        return QueueActionBuilder("age")
+    
+    run_queue([
+        # Empty queue should have age 0
+        call_age().expect(0),
+        # Add first task at T+0
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_age().expect(0),  # Only one task, age is 0
+        # Add second task at T+5 minutes
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(2),
+        call_age().expect(300),  # 5 minutes = 300 seconds
+        # Add third task at T+10 minutes
+        call_enqueue("companies_house", 3, iso_ts(delta_minutes=10)).expect(3),
+        call_age().expect(600),  # 10 minutes = 600 seconds (oldest to newest)
+        # Dequeue oldest task
+        call_dequeue().expect("id_verification", 1),
+        call_age().expect(300),  # Now gap is from T+5 to T+10 = 5 minutes
+        # Dequeue another
+        call_dequeue().expect("id_verification", 2),
+        call_age().expect(0),  # Only one task left
+        # Dequeue last
+        call_dequeue().expect("companies_house", 3),
+        call_age().expect(0),  # Empty queue
+    ])
