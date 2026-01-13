@@ -67,12 +67,12 @@ class Queue:
                 self._timestamp_for_task(t) for t in self._queue
             )   
             task_age_seconds = (newest_timestamp - task_timestamp).total_seconds()
-            is_bank_and_old = task_age_seconds > 300 # 5 minutes
+            is_bank_and_old = task_age_seconds >= 300 # 5 minutes or more
         else:
             is_bank_and_old = False
 
         if is_bank_and_old:
-            return(0, task_timestamp)
+            return (0, 0, task_timestamp, task_timestamp)
         elif  is_bank and priority == Priority.NORMAL:
             # Globally deprioritize - use a high priority number to sort last
             return (3, 0, MAX_TIMESTAMP, self._timestamp_for_task(task))
@@ -286,4 +286,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
