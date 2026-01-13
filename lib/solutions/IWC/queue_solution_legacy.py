@@ -59,38 +59,41 @@ class Queue:
         return sum(1 for task in self._queue if task.user_id == user_id)
 
     def _bank_statements_sort_key(self, task: TaskSubmission):
-            is_bank = self._is_bank_statements_provider(task)
-            priority = self._priority_for_task(task)
-            task_timestamp = self._timestamp_for_task(task)
+        is_bank = self._is_bank_statements_provider(task)
+        priority = self._priority_for_task(task)
+        task_timestamp = self._timestamp_for_task(task)
+        
+        group_earliest_raw = self._earliest_group_timestamp_for_task(task)
+        if group_earliest_raw == MAX_TIMESTAMP:
+            group_timestamp = task_timestamp
+        elif isinstance(group_earliest_raw, str):
+            group_timestamp = self._timestamp_for_task(TaskSubmission(provider="", user_id=0, timestamp=group_earliest_raw))
+        else:
+            group_timestamp = group_earliest_raw
+
+        if is_bank and self._newest_timestamp_cache is not None:
+            task_age_seconds = (self._newest_timestamp_cache - task_timestamp).total_seconds()
+            is_bank_and_old = task_age_seconds >= 300 
+        else:
+            is_bank_and_old = False
+
+        # 1. Rule of 3 elevation: Treat as a normal task
+        if is_bank and priority == Priority.HIGH and group_earliest_raw != MAX_TIMESTAMP:
+            return (group_timestamp, priority, 0, task_timestamp, 0)
+
+        # 2. Time-based elevation: Priority 1.5 (between HIGH and NORMAL)
+        if is_bank_and_old:
+            return (task_timestamp, 1.5, 0, task_timestamp, 0)
+        
+        # 3. Standard Bank Statement: Use actual timestamp but lower priority (3)
+        # FIX: Changed MAX_TIMESTAMP to task_timestamp to prevent global "dumping"
+        elif is_bank:
+            return (task_timestamp, 3, 1, task_timestamp, 0)
+        
+        # 4. All other tasks
+        else:
+            return (group_timestamp, priority, 0, task_timestamp, 0)
             
-            # Get group timestamp, or use task timestamp if not in a group
-            group_earliest_raw = self._earliest_group_timestamp_for_task(task)
-            if group_earliest_raw == MAX_TIMESTAMP:
-                group_timestamp = task_timestamp
-            elif isinstance(group_earliest_raw, str):
-                group_timestamp = self._timestamp_for_task(TaskSubmission(provider="", user_id=0, timestamp=group_earliest_raw))
-            else:
-                group_timestamp = group_earliest_raw
-
-            # Age calculation for bank_statements
-            if is_bank and self._newest_timestamp_cache is not None:
-                task_age_seconds = (self._newest_timestamp_cache - task_timestamp).total_seconds()
-                is_bank_and_old = task_age_seconds >= 300 
-            else:
-                is_bank_and_old = False
-
-            # treat it exactly like a normal task to preserve chronological order.
-            if is_bank and priority == Priority.HIGH and group_earliest_raw != MAX_TIMESTAMP:
-                return (group_timestamp, priority, 0, task_timestamp, 0)
-
-            if is_bank_and_old:
-                return (task_timestamp, 1.5, 0, task_timestamp, 0)
-            elif is_bank:
-                # Deprioritize bank tasks that aren't old or part of a Rule of 3 group
-                return (MAX_TIMESTAMP, 3, 1, MAX_TIMESTAMP, 0)
-            else:
-                # Normal tasks
-                return (group_timestamp, priority, 0, task_timestamp, 0)
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
         if provider is None:
@@ -305,5 +308,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
