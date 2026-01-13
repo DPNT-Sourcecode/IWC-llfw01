@@ -62,8 +62,8 @@ class Queue:
         user_task_count = self._user_task_count(task.user_id)
         # For users with <3 tasks, bank_statements must be globally last
         if is_bank and user_task_count < 3:
-            # Globally deprioritize
-            return (2, self._timestamp_for_task(task))
+            # Globally deprioritize - use a high priority number to sort last
+            return (3, 0, MAX_TIMESTAMP, self._timestamp_for_task(task))
         elif is_bank:
             # Bank statements for users with >=3 tasks: deprioritize within their own tasks
             # but still respect Rule of 3 priority over other users
@@ -269,6 +269,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
