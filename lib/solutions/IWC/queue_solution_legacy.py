@@ -59,18 +59,19 @@ class Queue:
 
     def _bank_statements_sort_key(self, task: TaskSubmission):
         is_bank = self._is_bank_statements_provider(task)
-        user_task_count = self._user_task_count(task.user_id)
-        # For users with <3 tasks, bank_statements must be globally last
-        if is_bank and user_task_count < 3:
+        priority = self._priority_for_task(task)
+        
+        # For bank_statements tasks with NORMAL priority (no Rule of 3), globally deprioritize
+        if is_bank and priority == Priority.NORMAL:
             # Globally deprioritize - use a high priority number to sort last
             return (3, 0, MAX_TIMESTAMP, self._timestamp_for_task(task))
         elif is_bank:
-            # Bank statements for users with >=3 tasks: deprioritize within their own tasks
+            # Bank statements for users with HIGH priority (Rule of 3): deprioritize within their own tasks
             # but still respect Rule of 3 priority over other users
-            return (self._priority_for_task(task), 1, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
+            return (priority, 1, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
         else:
             # Normal tasks
-            return (self._priority_for_task(task), 0, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
+            return (priority, 0, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task))
     
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
