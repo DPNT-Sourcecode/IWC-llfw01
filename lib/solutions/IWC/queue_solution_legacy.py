@@ -70,19 +70,18 @@ class Queue:
             is_bank_and_old = False
 
         if is_bank_and_old:
-            # Elevated bank_statements: sort like normal tasks but use -1 as tie-breaker
-            # to come before normal tasks (0) with same priority/group/timestamp
-            return (priority, 0, self._earliest_group_timestamp_for_task(task), task_timestamp, -1)
+            # Elevated bank_statements: elevation flag=0 makes them come first (before HIGH priority)
+            return (0, priority, 0, self._earliest_group_timestamp_for_task(task), task_timestamp, -1)
         elif  is_bank and priority == Priority.NORMAL:
-            # Globally deprioritize - use a high priority number to sort last
-            return (3, 0, MAX_TIMESTAMP, self._timestamp_for_task(task), 0)
+            # Globally deprioritize - elevation flag=1, priority=3 to sort last
+            return (1, 3, 0, MAX_TIMESTAMP, self._timestamp_for_task(task), 0)
         elif is_bank:
             # Bank statements for users with HIGH priority (Rule of 3): deprioritize within their own tasks
             # but still respect Rule of 3 priority over other users
-            return (priority, 1, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task), 0)
+            return (1, priority, 1, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task), 0)
         else:
-            # Normal tasks - use 0 as tie-breaker (after elevated bank_statements with -1)
-            return (priority, 0, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task), 0)
+            # Normal tasks - elevation flag=1, normal priority
+            return (1, priority, 0, self._earliest_group_timestamp_for_task(task), self._timestamp_for_task(task), 0)
     
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
@@ -292,3 +291,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+

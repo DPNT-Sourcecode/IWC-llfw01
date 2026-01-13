@@ -154,16 +154,16 @@ def test_iwc_r5_s5() -> None:
 
 
 def test_iwc_r5_s6() -> None:
-    """IWC_R5_S6: Multiple users with bank_statements"""
+    """IWC_R5_S6: Multiple users with bank_statements - elevated comes before Rule of 3"""
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=0)).expect(1),
         call_enqueue("companies_house", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=1)).expect(2),
         call_enqueue("id_verification", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=6)).expect(3),
         call_enqueue("bank_statements", 2, iso_ts(base=datetime(2025, 10, 20, 12, 0, tzinfo=timezone.utc), delta_minutes=7)).expect(4),
+        call_dequeue().expect("bank_statements", 1),  # Elevated (7 min age) - comes before Rule of 3
         call_dequeue().expect("companies_house", 2),  # User 2 has Rule of 3
         call_dequeue().expect("id_verification", 2),
-        call_dequeue().expect("bank_statements", 2),  # User 2's bank_statements (not old enough)
-        call_dequeue().expect("bank_statements", 1),  # User 1's bank_statements (globally deprioritized)
+        call_dequeue().expect("bank_statements", 2),  # User 2's bank_statements (part of Rule of 3)
     ])
 
 
@@ -209,3 +209,4 @@ def test_iwc_r5_s11() -> None:
         call_dequeue().expect("bank_statements", 1),  # Elevated, but after older companies_house(2)
         call_dequeue().expect("companies_house", 1),  # Newest
     ])
+
