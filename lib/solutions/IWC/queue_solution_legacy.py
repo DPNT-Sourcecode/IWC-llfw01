@@ -51,6 +51,22 @@ class Queue:
     def __init__(self):
         self._queue = []
 
+    def _is_bank_statements_provider(self, task: TaskSubmission) -> bool:
+        return task.provider == "bank_statements"
+    
+    def _user_task_count(self, user_id: int) -> int:
+        return sum(1 for task in self._queue if task.user_id == user_id)
+
+    def _bank_statements_sort_key(self, task: TaskSubmission):
+        is_bank = 1 if self._is_bank_statements_provider(task) else 0
+        user_task_count = self._user_task_count(task.user_id)
+
+        # FOr users with 3 tasks it goes at the back of their queue
+        # for users with <3 tasks it goes to back globally 
+        deprioritize = 1 if (is_bank and user_task_count < 3) else 0
+        deprioritize_within_user_queue = 1 if (is_bank and user_task_count >= 3) else 0
+        return (deprioritize, self._priority_for_task(task), self._earliest_group_timestamp_for_task(task), deprioritize_within_user_queue, self._timestamp_for_task(task))
+    
     def _collect_dependencies(self, task: TaskSubmission) -> list[TaskSubmission]:
         provider = next((p for p in REGISTERED_PROVIDERS if p.name == task.provider), None)
         if provider is None:
@@ -145,13 +161,7 @@ class Queue:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
 
-        self._queue.sort(
-            key=lambda i: (
-                self._priority_for_task(i),
-                self._earliest_group_timestamp_for_task(i),
-                self._timestamp_for_task(i),
-            )
-        )
+        self._queue.sort(key=self._bank_statements_sort_key)
 
         task = self._queue.pop(0)
         return TaskDispatch(
@@ -254,3 +264,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
