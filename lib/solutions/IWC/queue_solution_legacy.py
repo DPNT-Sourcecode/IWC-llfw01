@@ -160,6 +160,8 @@ class Queue:
             user_id = task.user_id
             user_tasks = [t for t in self._queue if t.user_id == user_id]
             if len(user_tasks) >= 3:
+                # Debug print
+                # print(f"User {user_id} reached 3 tasks. Updating {len(user_tasks)} tasks.")
                 earliest_timestamp = sorted(user_tasks, key=lambda t: self._timestamp_for_task(t))[0].timestamp
                 for t in user_tasks:
                     t.metadata["priority"] = Priority.HIGH
@@ -285,4 +287,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
