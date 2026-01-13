@@ -5,4 +5,3 @@ class HelloSolution:
     def hello(self, friend_name):
         return "Hello, " + friend_name + "!"
 
-
