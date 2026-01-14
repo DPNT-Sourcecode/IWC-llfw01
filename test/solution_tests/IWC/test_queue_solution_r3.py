@@ -234,4 +234,3 @@ def test_complex_scenario_all_rules() -> None:
         # Finally bank_statements from user 2
         call_dequeue().expect("bank_statements", 2),
     ])
-
