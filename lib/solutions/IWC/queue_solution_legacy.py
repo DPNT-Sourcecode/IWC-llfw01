@@ -176,10 +176,22 @@ class Queue:
 
         # Check if any user has Rule of 3 and find earliest Rule of 3 timestamp
         earliest_rule_of_3_timestamp = None
+        rule_of_3_users = set()
         for user_id, count in task_count.items():
             if count >= 3:
+                rule_of_3_users.add(user_id)
                 if earliest_rule_of_3_timestamp is None or priority_timestamps[user_id] < earliest_rule_of_3_timestamp:
                     earliest_rule_of_3_timestamp = priority_timestamps[user_id]
+
+        # Check if there are time-sensitive bank_statements older than the earliest Rule of 3
+        has_interrupting_time_sensitive = False
+        if earliest_rule_of_3_timestamp is not None:
+            for task in self._queue:
+                if id(task) in time_sensitive_tasks and task.provider == "bank_statements":
+                    task_ts = self._timestamp_for_task(task)
+                    if task_ts < earliest_rule_of_3_timestamp:
+                        has_interrupting_time_sensitive = True
+                        break
 
         for task in self._queue:
             metadata = task.metadata
@@ -196,8 +208,12 @@ class Queue:
             if priority_level is None or priority_level == Priority.NORMAL:
                 if task_count[task.user_id] >= 3:
                     # Rule of 3 priority
-                    metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
+                    # If there's a time-sensitive task that needs to interleave, use individual timestamps
+                    if has_interrupting_time_sensitive:
+                        metadata["group_earliest_timestamp"] = self._timestamp_for_task(task)
+                    else:
+                        metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                 elif is_time_sensitive and task.provider == "bank_statements":
                     # Time-sensitive bank_statements: get HIGH priority with own timestamp
                     # This makes them sort by timestamp alongside Rule of 3 tasks
@@ -343,6 +359,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
