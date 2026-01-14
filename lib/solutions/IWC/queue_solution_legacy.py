@@ -8,8 +8,7 @@ from solutions.IWC.task_types import TaskSubmission, TaskDispatch
 
 class Priority(IntEnum):
     """Represents the queue ordering tiers observed in the legacy system."""
-    URGENT = 0  # Time-sensitive bank_statements (older than Rule of 3)
-    HIGH = 1  # Rule of 3
+    HIGH = 1  # Rule of 3 and time-sensitive bank_statements
     NORMAL = 2  # Normal tasks
 
 @dataclass
@@ -200,11 +199,11 @@ class Queue:
                     metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
                 elif is_time_sensitive and task.provider == "bank_statements":
-                    # Time-sensitive bank_statements: get URGENT priority if any Rule of 3 exists
-                    # This allows them to sort by individual timestamp and interrupt Rule of 3 groups
+                    # Time-sensitive bank_statements: get HIGH priority with own timestamp
+                    # This makes them sort by timestamp alongside Rule of 3 tasks
                     task_ts = self._timestamp_for_task(task)
                     if earliest_rule_of_3_timestamp is not None:
-                        metadata["priority"] = Priority.URGENT
+                        metadata["priority"] = Priority.HIGH
                         metadata["group_earliest_timestamp"] = task_ts
                     else:
                         metadata["priority"] = Priority.NORMAL
@@ -344,5 +343,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 

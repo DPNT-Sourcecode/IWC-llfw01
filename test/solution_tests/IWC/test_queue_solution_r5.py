@@ -118,14 +118,14 @@ def test_time_sensitive_with_rule_of_3() -> None:
         call_enqueue("bank_statements", 2, "2025-10-20 12:03:00").expect(4),
         # User 3: much later task
         call_enqueue("companies_house", 3, "2025-10-20 12:10:00").expect(5),
-        # Time-sensitive bank_statements(2) at 12:03 gets URGENT priority (0), sorts before HIGH (1)
-        # Then sorts by timestamp within URGENT: just bank_statements(2)
-        # Then HIGH priority tasks sort by group then timestamp: companies, id_verification, bank_statements(1)
-        call_dequeue().expect("bank_statements", 2),  # URGENT, comes first
-        call_dequeue().expect("companies_house", 1),  # HIGH, Rule of 3
+        # Time-sensitive bank_statements(2) at 12:03 gets HIGH priority with group_earliest=12:03
+        # Rule of 3 User 1 has HIGH priority with group_earliest=12:00
+        # Sorts by group_earliest: 12:00 (User 1 group) < 12:03 (bank_statements), so User 1 processes first
+        call_dequeue().expect("companies_house", 1),
         call_dequeue().expect("id_verification", 1),
         call_dequeue().expect("bank_statements", 1),
-        call_dequeue().expect("companies_house", 3),  # NORMAL
+        call_dequeue().expect("bank_statements", 2),  # Time-sensitive, but group_earliest=12:03 > 12:00
+        call_dequeue().expect("companies_house", 3),
     ])
 
 
@@ -387,5 +387,6 @@ def test_deployment_s12_time_sensitive_with_dependencies() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 1),
     ])
+
 
 
