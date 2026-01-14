@@ -107,7 +107,7 @@ def test_time_sensitive_respects_older_timestamps() -> None:
 def test_time_sensitive_with_rule_of_3() -> None:
     """
     Time-sensitive bank_statements with Rule of 3 interaction.
-    Rule of 3 still takes priority.
+    Time-sensitive gets URGENT priority and sorts by timestamp, interrupting Rule of 3.
     """
     run_queue([
         # User 1: 3 tasks triggering Rule of 3
@@ -118,13 +118,14 @@ def test_time_sensitive_with_rule_of_3() -> None:
         call_enqueue("bank_statements", 2, "2025-10-20 12:03:00").expect(4),
         # User 3: much later task
         call_enqueue("companies_house", 3, "2025-10-20 12:10:00").expect(5),
-        # User 1 has priority (Rule of 3)
-        call_dequeue().expect("companies_house", 1),
+        # Time-sensitive bank_statements(2) at 12:03 gets URGENT priority (0), sorts before HIGH (1)
+        # Then sorts by timestamp within URGENT: just bank_statements(2)
+        # Then HIGH priority tasks sort by group then timestamp: companies, id_verification, bank_statements(1)
+        call_dequeue().expect("bank_statements", 2),  # URGENT, comes first
+        call_dequeue().expect("companies_house", 1),  # HIGH, Rule of 3
         call_dequeue().expect("id_verification", 1),
         call_dequeue().expect("bank_statements", 1),
-        # User 2 bank_statements is time-sensitive (7 min gap)
-        call_dequeue().expect("bank_statements", 2),
-        call_dequeue().expect("companies_house", 3),
+        call_dequeue().expect("companies_house", 3),  # NORMAL
     ])
 
 
@@ -386,4 +387,5 @@ def test_deployment_s12_time_sensitive_with_dependencies() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 1),
     ])
+
 

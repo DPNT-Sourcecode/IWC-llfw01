@@ -200,10 +200,10 @@ class Queue:
                     metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
                 elif is_time_sensitive and task.provider == "bank_statements":
-                    # Time-sensitive bank_statements: get URGENT priority if older than earliest Rule of 3
+                    # Time-sensitive bank_statements: get URGENT priority if any Rule of 3 exists
                     # This allows them to sort by individual timestamp and interrupt Rule of 3 groups
                     task_ts = self._timestamp_for_task(task)
-                    if earliest_rule_of_3_timestamp is not None and task_ts < earliest_rule_of_3_timestamp:
+                    if earliest_rule_of_3_timestamp is not None:
                         metadata["priority"] = Priority.URGENT
                         metadata["group_earliest_timestamp"] = task_ts
                     else:
@@ -344,4 +344,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
