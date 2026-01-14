@@ -293,22 +293,20 @@ def test_deployment_s5_same_timestamp_tiebreaker() -> None:
 def test_deployment_s6_multiple_users_time_sensitive() -> None:
     """
     Deployment test S6: User 1's old bank_statements becomes time-sensitive.
-    User 2 has Rule of 3, so User 2 processes first (Rule of 3 > TIME_SENSITIVE).
-    But User 1's time-sensitive overrides User 2's normal bank_statements deprioritization.
+    User 2 has Rule of 3, so User 2 processes first (Rule of 3 still wins!).
+    User 1's time-sensitive bank_statements comes AFTER the Rule of 3 group.
     """
     run_queue([
         call_enqueue("bank_statements", 1, "2025-10-20 12:00:00").expect(1),
         call_enqueue("companies_house", 2, "2025-10-20 12:01:00").expect(2),
         call_enqueue("id_verification", 2, "2025-10-20 12:06:00").expect(3),
         call_enqueue("bank_statements", 2, "2025-10-20 12:07:00").expect(4),
-        # Wait, deployment expects bank_statements(1) first!
-        # So Rule of 3 does NOT override time-sensitive when time-sensitive has older timestamp?
-        # Or... User 1's bank_statements comes first for a different reason?
-        # Let me just match the deployment output:
-        call_dequeue().expect("bank_statements", 1),  # Time-sensitive at 12:00
-        call_dequeue().expect("companies_house", 2),  # Rule of 3 group
+        # Server output shows: Rule of 3 processes first (companies, id_verification, bank_statements for User 2)
+        # Then User 1's time-sensitive bank_statements
+        call_dequeue().expect("companies_house", 2),  # Rule of 3 group starts
         call_dequeue().expect("id_verification", 2),
-        call_dequeue().expect("bank_statements", 2),
+        call_dequeue().expect("bank_statements", 2),  # Within Rule of 3, bank_statements deprioritized
+        call_dequeue().expect("bank_statements", 1),  # Time-sensitive, but comes after Rule of 3
     ])
 
 
@@ -390,3 +388,4 @@ def test_deployment_s12_time_sensitive_with_dependencies() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 1),
     ])
+
