@@ -8,7 +8,8 @@ from solutions.IWC.task_types import TaskSubmission, TaskDispatch
 
 class Priority(IntEnum):
     """Represents the queue ordering tiers observed in the legacy system."""
-    HIGH = 1
+    HIGH = 0  # Rule of 3 (highest priority)
+    TIME_SENSITIVE = 1  # Time-sensitive bank_statements without Rule of 3
     NORMAL = 2
 
 @dataclass
@@ -183,19 +184,29 @@ class Queue:
             except (TypeError, ValueError):
                 priority_level = None
 
+            # Check if task is time-sensitive
+            is_time_sensitive = id(task) in time_sensitive_tasks
+            
             if priority_level is None or priority_level == Priority.NORMAL:
                 metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
-                if task_count[task.user_id] >= 3:
+                # Check for time-sensitive bank_statements FIRST (higher priority than Rule of 3)
+                if is_time_sensitive and task.provider == "bank_statements" and task_count[task.user_id] < 3:
+                    # Time-sensitive bank_statements without Rule of 3 get highest priority
+                    metadata["priority"] = Priority.TIME_SENSITIVE
+                    metadata["group_earliest_timestamp"] = self._timestamp_for_task(task)
+                elif task_count[task.user_id] >= 3:
+                    # Rule of 3 priority
                     metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
                 else:
+                    # Normal priority
                     metadata["priority"] = Priority.NORMAL
             else:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
             
             # Mark time-sensitive bank_statements
-            metadata["is_time_sensitive"] = id(task) in time_sensitive_tasks
+            metadata["is_time_sensitive"] = is_time_sensitive
 
         self._queue.sort(
             key=lambda i: (
@@ -321,5 +332,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 

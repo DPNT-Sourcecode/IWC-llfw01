@@ -293,20 +293,21 @@ def test_deployment_s5_same_timestamp_tiebreaker() -> None:
 def test_deployment_s6_multiple_users_time_sensitive() -> None:
     """
     Deployment test S6: User 1's old bank_statements becomes time-sensitive,
-    but User 2 without Rule of 3 processes normally first by timestamp.
+    has HIGHER priority than User 2's Rule of 3 (time-sensitive overrides Rule of 3).
     """
     run_queue([
         call_enqueue("bank_statements", 1, "2025-10-20 12:00:00").expect(1),
         call_enqueue("companies_house", 2, "2025-10-20 12:01:00").expect(2),
         call_enqueue("id_verification", 2, "2025-10-20 12:06:00").expect(3),
         call_enqueue("bank_statements", 2, "2025-10-20 12:07:00").expect(4),
-        # User 2: companies_house (12:01), id_verification (12:06), bank_statements (12:07 - not time-sensitive)
-        # User 1: bank_statements (12:00 - time-sensitive with 7 min gap)
-        # Order: companies_house(2), id_verification(2), bank_statements(2), bank_statements(1)
+        # User 1: bank_statements (12:00 - time-sensitive with 7 min gap) - TIME_SENSITIVE priority
+        # User 2: Rule of 3 (earliest 12:01) - HIGH priority
+        # TIME_SENSITIVE (0) > HIGH (1), so user 1 processes first
+        call_dequeue().expect("bank_statements", 1),
+        # Then User 2 with Rule of 3
         call_dequeue().expect("companies_house", 2),
         call_dequeue().expect("id_verification", 2),
         call_dequeue().expect("bank_statements", 2),
-        call_dequeue().expect("bank_statements", 1),
     ])
 
 
@@ -388,4 +389,5 @@ def test_deployment_s12_time_sensitive_with_dependencies() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 1),
     ])
+
 
