@@ -183,15 +183,14 @@ class Queue:
                 if earliest_rule_of_3_timestamp is None or priority_timestamps[user_id] < earliest_rule_of_3_timestamp:
                     earliest_rule_of_3_timestamp = priority_timestamps[user_id]
 
-        # Check if there are time-sensitive bank_statements older than the earliest Rule of 3
-        has_interrupting_time_sensitive = False
+        # Check if there are any time-sensitive bank_statements when Rule of 3 exists
+        # If both exist, all HIGH priority tasks sort by individual timestamp
+        has_time_sensitive_with_rule_of_3 = False
         if earliest_rule_of_3_timestamp is not None:
             for task in self._queue:
                 if id(task) in time_sensitive_tasks and task.provider == "bank_statements":
-                    task_ts = self._timestamp_for_task(task)
-                    if task_ts < earliest_rule_of_3_timestamp:
-                        has_interrupting_time_sensitive = True
-                        break
+                    has_time_sensitive_with_rule_of_3 = True
+                    break
 
         for task in self._queue:
             metadata = task.metadata
@@ -209,8 +208,8 @@ class Queue:
                 if task_count[task.user_id] >= 3:
                     # Rule of 3 priority
                     metadata["priority"] = Priority.HIGH
-                    # If there's a time-sensitive task that needs to interleave, use individual timestamps
-                    if has_interrupting_time_sensitive:
+                    # If there's a time-sensitive task, use individual timestamps for all HIGH tasks
+                    if has_time_sensitive_with_rule_of_3:
                         metadata["group_earliest_timestamp"] = self._timestamp_for_task(task)
                     else:
                         metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
@@ -359,6 +358,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

@@ -321,16 +321,16 @@ def test_deployment_s7_rule_of_3_overrides_time_sensitive() -> None:
         call_enqueue("bank_statements", 2, "2025-10-20 12:07:00").expect(4),
         call_enqueue("companies_house", 1, "2025-10-20 12:08:00").expect(5),
         call_enqueue("id_verification", 1, "2025-10-20 12:09:00").expect(6),
-        # User 2 has Rule of 3 (earliest 12:00)
-        # User 1 has Rule of 3 (earliest 12:01)
-        # User 2 processes first (earlier group timestamp)
-        call_dequeue().expect("companies_house", 2),
-        call_dequeue().expect("id_verification", 2),
-        call_dequeue().expect("bank_statements", 2),  # Within Rule of 3 group, bank_statements deprioritized
-        # Then User 1
-        call_dequeue().expect("bank_statements", 1),  # time-sensitive within Rule of 3
-        call_dequeue().expect("companies_house", 1),
-        call_dequeue().expect("id_verification", 1),
+        # User 2 has Rule of 3 (earliest 12:00): companies_house(12:00), id_verification(12:02), bank_statements(12:07)
+        # User 1 has Rule of 3 (earliest 12:01): bank_statements(12:01), companies_house(12:08), id_verification(12:09)
+        # bank_statements(1) is time-sensitive (6-min gap to bank_statements(2))
+        # When time-sensitive exists with Rule of 3, all HIGH priority tasks sort by individual timestamp
+        call_dequeue().expect("companies_house", 2),  # 12:00
+        call_dequeue().expect("bank_statements", 1),  # 12:01 time-sensitive
+        call_dequeue().expect("id_verification", 2),  # 12:02
+        call_dequeue().expect("bank_statements", 2),  # 12:07
+        call_dequeue().expect("companies_house", 1),  # 12:08
+        call_dequeue().expect("id_verification", 1),  # 12:09
     ])
 
 
@@ -387,6 +387,7 @@ def test_deployment_s12_time_sensitive_with_dependencies() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 1),
     ])
+
 
 
 
