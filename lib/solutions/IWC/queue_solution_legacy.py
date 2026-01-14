@@ -8,8 +8,7 @@ from solutions.IWC.task_types import TaskSubmission, TaskDispatch
 
 class Priority(IntEnum):
     """Represents the queue ordering tiers observed in the legacy system."""
-    TIME_SENSITIVE = 0  # Time-sensitive bank_statements without Rule of 3 (highest)
-    HIGH = 1  # Rule of 3
+    HIGH = 1
     NORMAL = 2
 
 @dataclass
@@ -188,19 +187,19 @@ class Queue:
             is_time_sensitive = id(task) in time_sensitive_tasks
             
             if priority_level is None or priority_level == Priority.NORMAL:
-                metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
-                # Check for time-sensitive bank_statements FIRST (higher priority than Rule of 3)
-                if is_time_sensitive and task.provider == "bank_statements" and task_count[task.user_id] < 3:
-                    # Time-sensitive bank_statements without Rule of 3 get highest priority
-                    metadata["priority"] = Priority.TIME_SENSITIVE
-                    metadata["group_earliest_timestamp"] = self._timestamp_for_task(task)
-                elif task_count[task.user_id] >= 3:
+                if task_count[task.user_id] >= 3:
                     # Rule of 3 priority
                     metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
                 else:
                     # Normal priority
                     metadata["priority"] = Priority.NORMAL
+                    # Time-sensitive bank_statements use their own timestamp for group sorting
+                    # This makes them sort by timestamp instead of being deprioritized to end
+                    if is_time_sensitive and task.provider == "bank_statements":
+                        metadata["group_earliest_timestamp"] = self._timestamp_for_task(task)
+                    else:
+                        metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
             else:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
@@ -332,3 +331,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
