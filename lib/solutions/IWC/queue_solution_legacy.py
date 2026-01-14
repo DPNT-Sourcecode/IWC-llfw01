@@ -154,8 +154,8 @@ class Queue:
         priority_timestamps = {}
         for user_id in user_ids:
             user_tasks = [t for t in self._queue if t.user_id == user_id]
-            earliest_timestamp = sorted(user_tasks, key=lambda t: t.timestamp)[0].timestamp
-            priority_timestamps[user_id] = earliest_timestamp
+            earliest_task = sorted(user_tasks, key=lambda t: self._timestamp_for_task(t))[0]
+            priority_timestamps[user_id] = self._timestamp_for_task(earliest_task)
             task_count[user_id] = len(user_tasks)
 
         # Determine which bank_statements tasks are time-sensitive
@@ -191,11 +191,6 @@ class Queue:
                     # Rule of 3 priority
                     metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
-                elif is_time_sensitive and task.provider == "bank_statements":
-                    # Time-sensitive bank_statements: get HIGH priority and use task's own timestamp
-                    # This allows them to compete with Rule of 3 groups based on timestamp
-                    metadata["priority"] = Priority.HIGH
-                    metadata["group_earliest_timestamp"] = self._timestamp_for_task(task)
                 else:
                     # Normal priority - all tasks use MAX_TIMESTAMP for group sorting
                     metadata["priority"] = Priority.NORMAL
@@ -331,6 +326,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
