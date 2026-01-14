@@ -75,14 +75,15 @@ def test_rule_of_3_with_different_timestamps() -> None:
     """
     Test that Rule of 3 takes precedence even when timestamps differ.
     User 1 with 3 tasks should be processed before user 2, even if user 2's task is older.
+    Gaps < 5 min to avoid time-sensitive behavior.
     """
     run_queue([
         # User 2 enqueues first (oldest timestamp)
-        call_enqueue("bank_statements", 2, "2025-10-20 11:00:00").expect(1),
-        # User 1 enqueues 3 tasks with later timestamps
-        call_enqueue("companies_house", 1, "2025-10-20 12:00:00").expect(2),
-        call_enqueue("id_verification", 1, "2025-10-20 12:01:00").expect(3),
-        call_enqueue("bank_statements", 1, "2025-10-20 12:02:00").expect(4),
+        call_enqueue("bank_statements", 2, "2025-10-20 12:00:00").expect(1),
+        # User 1 enqueues 3 tasks with later timestamps (within 4 min)
+        call_enqueue("companies_house", 1, "2025-10-20 12:01:00").expect(2),
+        call_enqueue("id_verification", 1, "2025-10-20 12:02:00").expect(3),
+        call_enqueue("bank_statements", 1, "2025-10-20 12:03:00").expect(4),
         # User 1's tasks should all come first despite later timestamps
         call_dequeue().expect("companies_house", 1),
         call_dequeue().expect("id_verification", 1),
@@ -201,3 +202,4 @@ def test_rule_of_3_triggers_exactly_at_3() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("bank_statements", 2),
     ])
+

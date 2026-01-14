@@ -8,8 +8,8 @@ from solutions.IWC.task_types import TaskSubmission, TaskDispatch
 
 class Priority(IntEnum):
     """Represents the queue ordering tiers observed in the legacy system."""
-    HIGH = 0  # Rule of 3 (highest priority)
-    TIME_SENSITIVE = 1  # Time-sensitive bank_statements without Rule of 3
+    TIME_SENSITIVE = 0  # Time-sensitive bank_statements without Rule of 3 (highest)
+    HIGH = 1  # Rule of 3
     NORMAL = 2
 
 @dataclass
@@ -332,6 +332,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
