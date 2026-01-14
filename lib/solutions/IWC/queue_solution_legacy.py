@@ -8,8 +8,8 @@ from solutions.IWC.task_types import TaskSubmission, TaskDispatch
 
 class Priority(IntEnum):
     """Represents the queue ordering tiers observed in the legacy system."""
-    HIGH = 1
-    NORMAL = 2
+    HIGH = 1  # Rule of 3
+    NORMAL = 2  # Normal tasks
 
 @dataclass
 class Provider:
@@ -191,15 +191,15 @@ class Queue:
                     # Rule of 3 priority
                     metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
-                else:
-                    # Normal priority
+                elif is_time_sensitive and task.provider == "bank_statements":
+                    # Time-sensitive bank_statements: use task's own timestamp for group sorting
+                    # This allows them to compete with Rule of 3 groups based on timestamp
                     metadata["priority"] = Priority.NORMAL
-                    # Time-sensitive bank_statements use their own timestamp for group sorting
-                    # This makes them sort by timestamp instead of being deprioritized to end
-                    if is_time_sensitive and task.provider == "bank_statements":
-                        metadata["group_earliest_timestamp"] = self._timestamp_for_task(task)
-                    else:
-                        metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
+                    metadata["group_earliest_timestamp"] = self._timestamp_for_task(task)
+                else:
+                    # Normal priority - all tasks use MAX_TIMESTAMP for group sorting
+                    metadata["priority"] = Priority.NORMAL
+                    metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
             else:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
@@ -210,9 +210,8 @@ class Queue:
         self._queue.sort(
             key=lambda i: (
                 self._priority_for_task(i),
-                self._timestamp_for_task(i) if i.metadata.get("is_time_sensitive", False) else MAX_TIMESTAMP,
                 self._earliest_group_timestamp_for_task(i),
-                self._deprioritization_key(i),  # Smart deprioritization
+                self._deprioritization_key(i),  # Smart deprioritization - returns 0 for time-sensitive
                 self._timestamp_for_task(i),
                 # Tie-breaker: time-sensitive bank_statements come first when timestamps are equal
                 0 if (i.provider == "bank_statements" and i.metadata.get("is_time_sensitive", False)) else 1,
@@ -332,5 +331,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
