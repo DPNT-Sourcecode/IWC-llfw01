@@ -192,9 +192,9 @@ class Queue:
                     metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
                 elif is_time_sensitive and task.provider == "bank_statements":
-                    # Time-sensitive bank_statements: use task's own timestamp for group sorting
+                    # Time-sensitive bank_statements: get HIGH priority and use task's own timestamp
                     # This allows them to compete with Rule of 3 groups based on timestamp
-                    metadata["priority"] = Priority.NORMAL
+                    metadata["priority"] = Priority.HIGH
                     metadata["group_earliest_timestamp"] = self._timestamp_for_task(task)
                 else:
                     # Normal priority - all tasks use MAX_TIMESTAMP for group sorting
@@ -331,6 +331,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
