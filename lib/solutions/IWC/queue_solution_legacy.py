@@ -203,6 +203,8 @@ class Queue:
                 self._earliest_group_timestamp_for_task(i),
                 self._deprioritization_key(i),  # Smart deprioritization
                 self._timestamp_for_task(i),
+                # Tie-breaker: time-sensitive bank_statements come first when timestamps are equal
+                0 if (i.provider == "bank_statements" and i.metadata.get("is_time_sensitive", False)) else 1,
             )
         )
 
@@ -319,4 +321,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

@@ -271,3 +271,121 @@ def test_edge_case_all_bank_statements_time_sensitive() -> None:
         call_dequeue().expect("bank_statements", 2),
         call_dequeue().expect("bank_statements", 3),
     ])
+
+
+def test_deployment_s5_same_timestamp_tiebreaker() -> None:
+    """
+    Deployment test S5: When bank_statements and companies_house have same timestamp,
+    time-sensitive bank_statements wins the tie-breaker.
+    """
+    run_queue([
+        call_enqueue("companies_house", 1, "2025-10-20 12:00:00").expect(1),
+        call_enqueue("bank_statements", 1, "2025-10-20 12:00:00").expect(2),
+        call_enqueue("id_verification", 6, "2025-10-20 12:06:00").expect(3),
+        # bank_statements is time-sensitive (6 min gap) and same timestamp as companies_house
+        # Tie-breaker makes bank_statements come first
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("id_verification", 6),
+    ])
+
+
+def test_deployment_s6_multiple_users_time_sensitive() -> None:
+    """
+    Deployment test S6: User 1's old bank_statements becomes time-sensitive,
+    but User 2 without Rule of 3 processes normally first by timestamp.
+    """
+    run_queue([
+        call_enqueue("bank_statements", 1, "2025-10-20 12:00:00").expect(1),
+        call_enqueue("companies_house", 2, "2025-10-20 12:01:00").expect(2),
+        call_enqueue("id_verification", 2, "2025-10-20 12:06:00").expect(3),
+        call_enqueue("bank_statements", 2, "2025-10-20 12:07:00").expect(4),
+        # User 2: companies_house (12:01), id_verification (12:06), bank_statements (12:07 - not time-sensitive)
+        # User 1: bank_statements (12:00 - time-sensitive with 7 min gap)
+        # Order: companies_house(2), id_verification(2), bank_statements(2), bank_statements(1)
+        call_dequeue().expect("companies_house", 2),
+        call_dequeue().expect("id_verification", 2),
+        call_dequeue().expect("bank_statements", 2),
+        call_dequeue().expect("bank_statements", 1),
+    ])
+
+
+def test_deployment_s7_rule_of_3_overrides_time_sensitive() -> None:
+    """
+    Deployment test S7: Multiple users with Rule of 3 interaction and time-sensitive bank_statements.
+    Rule of 3 still takes priority over time-sensitive.
+    """
+    run_queue([
+        call_enqueue("companies_house", 2, "2025-10-20 12:00:00").expect(1),
+        call_enqueue("bank_statements", 1, "2025-10-20 12:01:00").expect(2),
+        call_enqueue("id_verification", 2, "2025-10-20 12:02:00").expect(3),
+        call_enqueue("bank_statements", 2, "2025-10-20 12:07:00").expect(4),
+        call_enqueue("companies_house", 1, "2025-10-20 12:08:00").expect(5),
+        call_enqueue("id_verification", 1, "2025-10-20 12:09:00").expect(6),
+        # User 2 has Rule of 3 (earliest 12:00)
+        # User 1 has Rule of 3 (earliest 12:01)
+        # User 2 processes first (earlier group timestamp)
+        call_dequeue().expect("companies_house", 2),
+        call_dequeue().expect("id_verification", 2),
+        call_dequeue().expect("bank_statements", 2),  # Within Rule of 3 group, bank_statements deprioritized
+        # Then User 1
+        call_dequeue().expect("bank_statements", 1),  # time-sensitive within Rule of 3
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("id_verification", 1),
+    ])
+
+
+def test_deployment_s10_time_sensitive_within_rule_of_3() -> None:
+    """
+    Deployment test S10: Rule of 3 with time-sensitive bank_statements deprioritized within group.
+    """
+    run_queue([
+        call_enqueue("bank_statements", 1, "2025-10-20 12:00:00").expect(1),
+        call_enqueue("id_verification", 1, "2025-10-20 12:01:00").expect(2),
+        call_enqueue("companies_house", 1, "2025-10-20 12:02:00").expect(3),
+        call_enqueue("companies_house", 2, "2025-10-20 12:03:00").expect(4),
+        # User 1 has Rule of 3 (3 tasks, earliest 12:00)
+        # User 2 has no Rule of 3 (1 task)
+        # User 1 processes first, bank_statements deprioritized within group (not time-sensitive, gap < 5 min)
+        call_dequeue().expect("id_verification", 1),
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("companies_house", 2),
+    ])
+
+
+def test_deployment_s11_time_sensitive_different_users() -> None:
+    """
+    Deployment test S11: Time-sensitive bank_statements respects timestamp ordering.
+    """
+    run_queue([
+        call_enqueue("companies_house", 1, "2025-10-20 12:07:00").expect(1),
+        call_enqueue("bank_statements", 1, "2025-10-20 12:01:00").expect(2),
+        call_enqueue("companies_house", 2, "2025-10-20 12:00:00").expect(3),
+        # Order: companies_house(2) at 12:00, bank_statements(1) at 12:01 (time-sensitive), companies_house(1) at 12:07
+        call_dequeue().expect("companies_house", 2),
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("companies_house", 1),
+    ])
+
+
+def test_deployment_s12_time_sensitive_with_dependencies() -> None:
+    """
+    Deployment test S12: Dependencies and time-sensitive bank_statements interaction.
+    """
+    run_queue([
+        call_enqueue("companies_house", 1, "2025-10-20 12:07:00").expect(1),
+        call_enqueue("id_verification", 1, "2025-10-20 12:07:00").expect(2),
+        call_enqueue("bank_statements", 1, "2025-10-20 12:01:00").expect(3),
+        call_enqueue("credit_check", 1, "2025-10-20 12:00:00").expect(4),
+        # credit_check adds dependency companies_house(1) which already exists
+        # Order: companies_house(1) due to dependency at 12:07
+        # Then credit_check at 12:00
+        # Then bank_statements at 12:01 (time-sensitive)
+        # Then id_verification at 12:07
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("credit_check", 1),
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("id_verification", 1),
+    ])
+
