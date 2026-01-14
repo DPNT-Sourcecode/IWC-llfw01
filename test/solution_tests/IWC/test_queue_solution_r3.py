@@ -130,11 +130,11 @@ def test_mixed_scenario_rule_of_3_and_deprioritization() -> None:
     """
     run_queue([
         # User 2: only bank_statements (should go to end globally)
-        call_enqueue("bank_statements", 2, "2025-10-20 11:00:00").expect(1),
+        call_enqueue("bank_statements", 2, "2025-10-20 12:00:00").expect(1),
         # User 1: 3 tasks triggering Rule of 3
-        call_enqueue("companies_house", 1, "2025-10-20 12:00:00").expect(2),
-        call_enqueue("id_verification", 1, "2025-10-20 12:01:00").expect(3),
-        call_enqueue("bank_statements", 1, "2025-10-20 12:02:00").expect(4),
+        call_enqueue("companies_house", 1, "2025-10-20 12:02:00").expect(2),
+        call_enqueue("id_verification", 1, "2025-10-20 12:03:00").expect(3),
+        call_enqueue("bank_statements", 1, "2025-10-20 12:04:00").expect(4),
         # User 1 has priority (Rule of 3)
         call_dequeue().expect("companies_house", 1),
         call_dequeue().expect("id_verification", 1),
@@ -234,3 +234,4 @@ def test_complex_scenario_all_rules() -> None:
         # Finally bank_statements from user 2
         call_dequeue().expect("bank_statements", 2),
     ])
+
