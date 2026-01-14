@@ -81,12 +81,12 @@ def test_deduplication_with_rule_of_3() -> None:
         # User 2's task
         call_enqueue("bank_statements", 2, "2025-10-20 12:00:00").expect(1),
         # User 1's tasks
-        call_enqueue("companies_house", 1, "2025-10-20 12:02:00").expect(2),
-        call_enqueue("id_verification", 1, "2025-10-20 12:01:00").expect(3),
+        call_enqueue("companies_house", 1, "2025-10-20 12:01:00").expect(2),
+        call_enqueue("id_verification", 1, "2025-10-20 12:02:00").expect(3),
         # Duplicate - doesn't count toward Rule of 3
-        call_enqueue("companies_house", 1, "2025-10-20 12:02:00").expect(3),
+        call_enqueue("companies_house", 1, "2025-10-20 12:03:00").expect(3),
         # This is the 3rd unique task - should trigger Rule of 3
-        call_enqueue("bank_statements", 1, "2025-10-20 12:03:00").expect(4),
+        call_enqueue("bank_statements", 1, "2025-10-20 12:04:00").expect(4),
         # User 1's tasks should be prioritized
         call_dequeue().expect("companies_house", 1),
         call_dequeue().expect("id_verification", 1),
@@ -194,3 +194,4 @@ def test_deduplication_multiple_duplicates_keeps_oldest() -> None:
         call_size().expect(1),
         call_dequeue().expect("id_verification", 5),
     ])
+

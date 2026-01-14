@@ -235,7 +235,7 @@ def test_time_sensitive_with_rule_of_3_same_user() -> None:
 def test_complex_time_sensitive_scenario() -> None:
     """
     Complex scenario combining all rules including time-sensitive bank_statements.
-    Rule of 3 priority takes precedence over time-sensitive.
+    Time-sensitive bank_statements older than Rule of 3 get HIGH priority and compete by timestamp.
     """
     run_queue([
         # Very old bank_statements
@@ -246,13 +246,13 @@ def test_complex_time_sensitive_scenario() -> None:
         call_enqueue("bank_statements", 2, "2025-10-20 11:02:00").expect(4),
         # Recent tasks
         call_enqueue("companies_house", 3, "2025-10-20 12:00:00").expect(5),
-        # User 2 has Rule of 3 priority (earliest 11:00) - processes first
-        # User 1's bank_statements is time-sensitive but doesn't override Rule of 3
+        # User 1's bank_statements is time-sensitive and older than Rule of 3, so gets HIGH priority
+        # Sorts by timestamp: bank_statements(1) at 10:00 comes first
+        call_dequeue().expect("bank_statements", 1),
+        # Then User 2's Rule of 3 group
         call_dequeue().expect("companies_house", 2),
         call_dequeue().expect("id_verification", 2),
         call_dequeue().expect("bank_statements", 2),
-        # Then user 1 (time-sensitive, older than user 3)
-        call_dequeue().expect("bank_statements", 1),
         # Then user 3
         call_dequeue().expect("companies_house", 3),
     ])
@@ -386,3 +386,4 @@ def test_deployment_s12_time_sensitive_with_dependencies() -> None:
         call_dequeue().expect("bank_statements", 1),
         call_dequeue().expect("id_verification", 1),
     ])
+
