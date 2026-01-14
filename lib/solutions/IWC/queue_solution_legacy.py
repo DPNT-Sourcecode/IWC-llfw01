@@ -174,6 +174,13 @@ class Queue:
                         time_sensitive_tasks.add(id(task))
                         break
 
+        # Check if any user has Rule of 3 and find earliest Rule of 3 timestamp
+        earliest_rule_of_3_timestamp = None
+        for user_id, count in task_count.items():
+            if count >= 3:
+                if earliest_rule_of_3_timestamp is None or priority_timestamps[user_id] < earliest_rule_of_3_timestamp:
+                    earliest_rule_of_3_timestamp = priority_timestamps[user_id]
+
         for task in self._queue:
             metadata = task.metadata
             current_earliest = metadata.get("group_earliest_timestamp", MAX_TIMESTAMP)
@@ -191,6 +198,15 @@ class Queue:
                     # Rule of 3 priority
                     metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
+                elif is_time_sensitive and task.provider == "bank_statements":
+                    # Time-sensitive bank_statements: get HIGH priority ONLY if older than earliest Rule of 3
+                    task_ts = self._timestamp_for_task(task)
+                    if earliest_rule_of_3_timestamp is not None and task_ts < earliest_rule_of_3_timestamp:
+                        metadata["priority"] = Priority.HIGH
+                        metadata["group_earliest_timestamp"] = task_ts
+                    else:
+                        metadata["priority"] = Priority.NORMAL
+                        metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
                 else:
                     # Normal priority - all tasks use MAX_TIMESTAMP for group sorting
                     metadata["priority"] = Priority.NORMAL
@@ -326,6 +342,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 
